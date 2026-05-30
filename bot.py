@@ -9,89 +9,80 @@ CHAT_ID = "351317325"
 
 bot = telebot.TeleBot(TOKEN)
 
-def get_all_coins():
+def get_signals():
     try:
         url = "https://api.binance.com/api/v3/ticker/24hr"
         r = requests.get(url, timeout=15)
         data = r.json()
-        usdt_pairs = [x for x in data if x['symbol'].endswith('USDT')]
-        return usdt_pairs
-    except:
-        return []
-
-def get_pump_signals(coins):
-    signals = []
-    for coin in coins:
-        try:
+        signals = []
+        for coin in data:
+            if not coin['symbol'].endswith('USDT'):
+                continue
             change = float(coin['priceChangePercent'])
             price = float(coin['lastPrice'])
             volume = float(coin['quoteVolume'])
-            if change >= 50 and volume > 100000:
+            if change >= 20 and volume > 1000000:
+                entry = price
+                take = round(price * 1.20, 6)
+                stop = round(price * 0.90, 6)
+                tv = f"https://www.tradingview.com/chart/?symbol=BINANCE:{coin['symbol']}"
                 signals.append({
                     'symbol': coin['symbol'],
                     'price': price,
                     'change': change,
-                    'volume': volume
+                    'entry': entry,
+                    'take': take,
+                    'stop': stop,
+                    'tv': tv
                 })
-        except:
-            continue
-    signals.sort(key=lambda x: x['change'], reverse=True)
-    return signals[:10]
+        signals.sort(key=lambda x: x['change'], reverse=True)
+        return signals[:10]
+    except:
+        return []
 
-def is_trading_time():
-    now = datetime.now()
-    hour = now.hour
-    return hour >= 4 or hour < 2
-
-def send_signals_auto():
+def send_auto():
     while True:
-        if is_trading_time():
-            coins = get_all_coins()
-            signals = get_pump_signals(coins)
+        now = datetime.now()
+        if now.hour >= 4 or now.hour < 2:
+            signals = get_signals()
             if signals:
-                msg = "ПАМП СИГНАЛЫ - РОСТ 50-100%+\n\n"
                 for s in signals:
-                    msg += f"{s['symbol']}\n"
-                    msg += f"Цена: ${s['price']:,.4f}\n"
-                    msg += f"Рост 24ч: +{s['change']:.2f}%\n"
-                    msg += f"Объем: ${s['volume']:,.0f}\n\n"
-                bot.send_message(CHAT_ID, msg)
+                    msg = (
+                        f"СИГНАЛ: {s['symbol']}\n"
+                        f"Рост: +{s['change']:.2f}%\n"
+                        f"Вход: ${s['entry']:.6f}\n"
+                        f"Тейк: ${s['take']:.6f} (+20%)\n"
+                        f"Стоп: ${s['stop']:.6f} (-10%)\n"
+                        f"График: {s['tv']}"
+                    )
+                    bot.send_message(CHAT_ID, msg)
+                    time.sleep(2)
         time.sleep(900)
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "Привет! Я крипто-бот для памп сигналов!\n\nКоманды:\n/signal - сигналы сейчас\n/top - топ 5 монет")
+    bot.reply_to(message, "Бот запущен! Ищу монеты с ростом 20%+\n\nКоманды:\n/signal - сигналы сейчас")
 
 @bot.message_handler(commands=['signal'])
 def signal(message):
-    bot.reply_to(message, "Сканирую все монеты Binance...")
-    coins = get_all_coins()
-    signals = get_pump_signals(coins)
+    bot.reply_to(message, "Сканирую Binance...")
+    signals = get_signals()
     if signals:
-        msg = "ПАМП СИГНАЛЫ - РОСТ 50-100%+\n\n"
         for s in signals:
-            msg += f"{s['symbol']}\n"
-            msg += f"Цена: ${s['price']:,.4f}\n"
-            msg += f"Рост 24ч: +{s['change']:.2f}%\n"
-            msg += f"Объем: ${s['volume']:,.0f}\n\n"
-        bot.reply_to(message, msg)
+            msg = (
+                f"СИГНАЛ: {s['symbol']}\n"
+                f"Рост: +{s['change']:.2f}%\n"
+                f"Вход: ${s['entry']:.6f}\n"
+                f"Тейк: ${s['take']:.6f} (+20%)\n"
+                f"Стоп: ${s['stop']:.6f} (-10%)\n"
+                f"График: {s['tv']}"
+            )
+            bot.reply_to(message, msg)
+            time.sleep(1)
     else:
-        bot.reply_to(message, "Сейчас нет монет с ростом 50%+. Жди...")
+        bot.reply_to(message, "Сейчас нет монет с ростом 20%+. Жди...")
 
-@bot.message_handler(commands=['top'])
-def top(message):
-    bot.reply_to(message, "Получаю топ 5...")
-    coins = get_all_coins()
-    signals = get_pump_signals(coins)[:5]
-    if signals:
-        msg = "ТОП 5 ПАМП МОНЕТ\n\n"
-        for i, s in enumerate(signals, 1):
-            msg += f"{i}. {s['symbol']} +{s['change']:.2f}%\n"
-        bot.reply_to(message, msg)
-    else:
-        bot.reply_to(message, "Сейчас нет монет с ростом 50%+.")
-
-t = threading.Thread(target=send_signals_auto)
+t = threading.Thread(target=send_auto)
 t.daemon = True
 t.start()
 

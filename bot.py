@@ -33,28 +33,28 @@ def fibonacci_levels(high, low):
 
 def check_signal(symbol):
     try:
-        # D1 - Фибоначчи уровни
-        d1_closes, d1_highs, d1_lows = get_klines(symbol, '1d', 100)
-        if len(d1_closes) < 20:
+        # H4 - Фибоначчи уровни
+        h4_closes, h4_highs, h4_lows = get_klines(symbol, '4h', 100)
+        if len(h4_closes) < 20:
             return None
 
-        high_d1 = max(d1_highs[-50:])
-        low_d1 = min(d1_lows[-50:])
-        fib = fibonacci_levels(high_d1, low_d1)
+        high_h4 = max(h4_highs[-50:])
+        low_h4 = min(h4_lows[-50:])
+        fib = fibonacci_levels(high_h4, low_h4)
         golden = fib['0.618']
 
-        # H4 - подтверждение
-        h4_closes, h4_highs, h4_lows = get_klines(symbol, '4h', 50)
-        if len(h4_closes) < 10:
+        # H1 - подтверждение
+        h1_closes, h1_highs, h1_lows = get_klines(symbol, '1h', 50)
+        if len(h1_closes) < 10:
             return None
 
-        current = h4_closes[-1]
-        prev = h4_closes[-2]
+        current = h1_closes[-1]
+        prev = h1_closes[-2]
 
-        # Цена пересекла 0.618 снизу вверх на H4
+        # Цена пересекла 0.618 снизу вверх на H1
         if prev < golden and current > golden:
-            # Проверяем что D1 тренд восходящий
-            if d1_closes[-1] > d1_closes[-10]:
+            # Проверяем что H4 тренд восходящий
+            if h4_closes[-1] > h4_closes[-10]:
                 entry = current
                 take = round(entry * 1.20, 6)
                 stop = round(entry * 0.90, 6)
@@ -101,8 +101,8 @@ def send_auto():
                     msg = (
                         f"ЛОНГ СИГНАЛ\n\n"
                         f"Монета: {s['symbol']}\n"
-                        f"Фибо 0.618 (D1): ${s['golden']:.6f}\n"
-                        f"Вход (H4): ${s['entry']:.6f}\n"
+                        f"Фибо 0.618 (H4): ${s['golden']:.6f}\n"
+                        f"Вход (H1): ${s['entry']:.6f}\n"
                         f"Тейк: ${s['take']:.6f} (+20%)\n"
                         f"Стоп: ${s['stop']:.6f} (-10%)\n"
                         f"График: {s['tv']}"
@@ -113,7 +113,7 @@ def send_auto():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "Бот запущен!\n\nФибоначчи D1 + подтверждение H4\n\nКоманды:\n/signal - сканировать рынок")
+    bot.reply_to(message, "Бот запущен!\n\nФибоначчи H4 + подтверждение H1\n\nКоманды:\n/signal - сканировать рынок")
 
 @bot.message_handler(commands=['signal'])
 def signal(message):
@@ -124,8 +124,8 @@ def signal(message):
             msg = (
                 f"ЛОНГ СИГНАЛ\n\n"
                 f"Монета: {s['symbol']}\n"
-                f"Фибо 0.618 (D1): ${s['golden']:.6f}\n"
-                f"Вход (H4): ${s['entry']:.6f}\n"
+                f"Фибо 0.618 (H4): ${s['golden']:.6f}\n"
+                f"Вход (H1): ${s['entry']:.6f}\n"
                 f"Тейк: ${s['take']:.6f} (+20%)\n"
                 f"Стоп: ${s['stop']:.6f} (-10%)\n"
                 f"График: {s['tv']}"
@@ -139,5 +139,5 @@ t = threading.Thread(target=send_auto)
 t.daemon = True
 t.start()
 
-print("Бот запущен! D1 Фибо + H4 подтверждение")
+print("Бот запущен! H4 Фибо + H1 подтверждение")
 bot.polling()

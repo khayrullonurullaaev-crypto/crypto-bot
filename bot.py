@@ -17,8 +17,8 @@ def get_klines(symbol, interval, limit=200):
         closes = [float(x[4]) for x in data]
         highs = [float(x[2]) for x in data]
         lows = [float(x[3]) for x in data]
-        volumes = [float(x[5]) for x in data]
-        return closes, highs, lows, volumes
+        opens = [float(x[1]) for x in data]
+        return closes, highs, lows, opens
     except:
         return [], [], [], []
 
@@ -31,90 +31,60 @@ def ema(closes, period):
         ema_values.append(price * k + ema_values[-1] * (1 - k))
     return ema_values
 
-def fibonacci_levels(high, low):
-    diff = high - low
-    return {
-        '0.618': low + diff * 0.618,
-        '0.650': low + diff * 0.650,
-    }
-
-def find_order_block(closes, highs, lows, current_price):
-    for i in range(len(closes) - 10, len(closes) - 2):
-        if closes[i] < lows[i-1] and closes[i+1] > highs[i]:
-            ob_high = highs[i]
-            ob_low = lows[i]
-            if ob_low <= current_price <= ob_high * 1.01:
-                return ob_low, ob_high
-    return None, None
-
-def check_bos(closes):
-    if len(closes) < 20:
+def bullish_engulfing(opens, closes):
+    if len(opens) < 2:
         return False
-    recent_high = max(closes[-20:-1])
-    if closes[-1] > recent_high:
+    prev_open = opens[-2]
+    prev_close = closes[-2]
+    curr_open = opens[-1]
+    curr_close = closes[-1]
+    prev_bearish = prev_close < prev_open
+    curr_bullish = curr_close > curr_open
+    engulfing = curr_open < prev_close and curr_close > prev_open
+    return prev_bearish and curr_bullish and engulfing
+
+def check_h1_long(closes, opens):
+    if len(closes) < 3:
+        return False
+    if closes[-1] > closes[-2] > closes[-3]:
+        return True
+    if opens[-1] < closes[-1] and closes[-1] > closes[-2]:
         return True
     return False
 
 def check_signal(symbol):
     try:
-        # H4 - Фибоначчи Golden Pocket
-        h4_closes, h4_highs, h4_lows, h4_vols = get_klines(symbol, '4h', 100)
-        if len(h4_closes) < 50:
+        # H4
+        h4_closes, h4_highs, h4_lows, h4_opens = get_klines(symbol, '4h', 200)
+        if len(h4_closes) < 200:
             return None
 
-        high_h4 = max(h4_highs[-50:])
-        low_h4 = min(h4_lows[-50:])
-        fib = fibonacci_levels(high_h4, low_h4)
-        golden_low = fib['0.618']
-        golden_high = fib['0.650']
-
-        # EMA 50/200 на H4 - золотой крест
+        # EMA 50/200 на H4
         ema50 = ema(h4_closes, 50)
         ema200 = ema(h4_closes, 200)
         if len(ema50) < 2 or len(ema200) < 2:
             return None
 
-        # EMA 50 должна быть выше EMA 200 (восходящий тренд)
         if ema50[-1] <= ema200[-1]:
             return None
 
-        # H1 - точка входа и подтверждение
-        h1_closes, h1_highs, h1_lows, h1_vols = get_klines(symbol, '1h', 50)
-        if len(h1_closes) < 20:
+        # Поглощение на H4
+        if not bullish_engulfing(h4_opens, h4_closes):
             return None
 
-        current = h1_closes[-1]
-        prev = h1_closes[-2]
-
-        # Цена пересекла Golden Pocket снизу вверх
-        if not (prev < golden_low and current > golden_low):
+        # H1 подтверждение
+        h1_closes, h1_highs, h1_lows, h1_opens = get_klines(symbol, '1h', 50)
+        if len(h1_closes) < 10:
             return None
 
-        # BOS - Break of Structure на H1
-        bos = check_bos(h1_closes)
-
-        # Order Block на H1
-        ob_low, ob_high = find_order_block(h1_closes, h1_highs, h1_lows, current)
-
-        entry = current
-        take = round(entry * 1.20, 6)
-        stop = round(entry * 0.90, 6)
-        tv = f"https://www.tradingview.com/chart/?symbol=BINANCE:{symbol}"
+        if not check_h1_long(h1_closes, h1_opens):
+            return None
 
         return {
             'symbol': symbol,
-            'price': current,
-            'golden_low': round(golden_low, 6),
-            'golden_high': round(golden_high, 6),
+            'price': h1_closes[-1],
             'ema50': round(ema50[-1], 6),
             'ema200': round(ema200[-1], 6),
-            'bos': bos,
-            'ob_low': round(ob_low, 6) if ob_low else None,
-            'ob_high': round(ob_high, 6) if ob_high else None,
-            'entry': entry,
-            'take': take,
-            'stop': stop,
-            'tv': tv
         }
     except:
         return None
@@ -142,20 +112,11 @@ def format_message(s):
     msg = f"ЛОНГ СИГНАЛ\n\n"
     msg += f"Монета: {s['symbol']}\n"
     msg += f"Цена: ${s['price']:.6f}\n\n"
-    msg += f"ФИБОНАЧЧИ H4\n"
-    msg += f"Golden Pocket: ${s['golden_low']:.6f} - ${s['golden_high']:.6f}\n\n"
-    msg += f"EMA\n"
     msg += f"EMA 50: ${s['ema50']:.6f}\n"
     msg += f"EMA 200: ${s['ema200']:.6f}\n"
     msg += f"Тренд: ВВЕРХ\n\n"
-    msg += f"SMC\n"
-    msg += f"BOS: {'ДА' if s['bos'] else 'НЕТ'}\n"
-    if s['ob_low']:
-        msg += f"Order Block: ${s['ob_low']:.6f} - ${s['ob_high']:.6f}\n"
-    msg += f"\nТОЧКА ВХОДА (H1): ${s['entry']:.6f}\n"
-    msg += f"ТЕЙК: ${s['take']:.6f} (+20%)\n"
-    msg += f"СТОП: ${s['stop']:.6f} (-10%)\n\n"
-    msg += f"График: {s['tv']}"
+    msg += f"Поглощение H4: ДА\n"
+    msg += f"Подтверждение H1: ДА\n"
     return msg
 
 def send_auto():
@@ -171,7 +132,7 @@ def send_auto():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "Бот запущен!\n\nСтратегия:\nFibonacci H4 + EMA 50/200 + SMC + H1 вход\n\nКоманды:\n/signal - сканировать рынок")
+    bot.reply_to(message, "Бот запущен!\n\nСтратегия:\nEMA 50/200 + Поглощение H4 + Подтверждение H1\n\nКоманды:\n/signal - сканировать рынок")
 
 @bot.message_handler(commands=['signal'])
 def signal(message):
@@ -188,5 +149,5 @@ t = threading.Thread(target=send_auto)
 t.daemon = True
 t.start()
 
-print("Бот запущен! Fibonacci H4 + EMA 50/200 + SMC + H1")
+print("Бот запущен! EMA 50/200 + Bullish Engulfing H4 + H1")
 bot.polling()

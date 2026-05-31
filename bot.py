@@ -34,29 +34,14 @@ def bullish_engulfing(opens, closes):
     engulfing = curr_open <= prev_close and curr_close >= prev_open
     return prev_bearish and curr_bullish and engulfing
 
-def check_h1_long(closes, opens):
-    if len(closes) < 3:
-        return False
-    if closes[-1] > closes[-2]:
-        return True
-    return False
-
 def check_signal(symbol):
     try:
-        # H4 - поглощение
-        h4_closes, h4_highs, h4_lows, h4_opens = get_klines(symbol, '4h', 50)
-        if len(h4_closes) < 10:
+        # H1 - поглощение
+        h1_closes, h1_highs, h1_lows, h1_opens = get_klines(symbol, '1h', 50)
+        if len(h1_closes) < 10:
             return None
 
-        if not bullish_engulfing(h4_opens, h4_closes):
-            return None
-
-        # H1 - подтверждение
-        h1_closes, h1_highs, h1_lows, h1_opens = get_klines(symbol, '1h', 20)
-        if len(h1_closes) < 5:
-            return None
-
-        if not check_h1_long(h1_closes, h1_opens):
+        if not bullish_engulfing(h1_opens, h1_closes):
             return None
 
         return {
@@ -89,8 +74,7 @@ def format_message(s):
     msg = f"ЛОНГ СИГНАЛ\n\n"
     msg += f"Монета: {s['symbol']}\n"
     msg += f"Цена: ${s['price']:.6f}\n\n"
-    msg += f"Поглощение H4: ДА\n"
-    msg += f"Подтверждение H1: ДА\n"
+    msg += f"Поглощение H1: ДА\n"
     return msg
 
 def send_auto():
@@ -106,7 +90,7 @@ def send_auto():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "Бот запущен!\n\nСтратегия:\nПоглощение H4 + Подтверждение H1\n\nКоманды:\n/signal - сканировать рынок")
+    bot.reply_to(message, "Бот запущен!\n\nСтратегия:\nПоглощение H1\n\nКоманды:\n/signal - сканировать рынок")
 
 @bot.message_handler(commands=['signal'])
 def signal(message):
@@ -123,5 +107,5 @@ t = threading.Thread(target=send_auto)
 t.daemon = True
 t.start()
 
-print("Бот запущен! Bullish Engulfing H4 + H1")
+print("Бот запущен! Bullish Engulfing H1")
 bot.polling()

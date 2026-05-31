@@ -9,7 +9,7 @@ CHAT_ID = "351317325"
 
 bot = telebot.TeleBot(TOKEN)
 
-def get_klines(symbol, interval, limit=200):
+def get_klines(symbol, interval, limit=50):
     try:
         url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
         r = requests.get(url, timeout=10)
@@ -22,15 +22,6 @@ def get_klines(symbol, interval, limit=200):
     except:
         return [], [], [], []
 
-def ema(closes, period):
-    if len(closes) < period:
-        return []
-    k = 2 / (period + 1)
-    ema_values = [sum(closes[:period]) / period]
-    for price in closes[period:]:
-        ema_values.append(price * k + ema_values[-1] * (1 - k))
-    return ema_values
-
 def bullish_engulfing(opens, closes):
     if len(opens) < 2:
         return False
@@ -40,41 +31,29 @@ def bullish_engulfing(opens, closes):
     curr_close = closes[-1]
     prev_bearish = prev_close < prev_open
     curr_bullish = curr_close > curr_open
-    engulfing = curr_open < prev_close and curr_close > prev_open
+    engulfing = curr_open <= prev_close and curr_close >= prev_open
     return prev_bearish and curr_bullish and engulfing
 
 def check_h1_long(closes, opens):
     if len(closes) < 3:
         return False
-    if closes[-1] > closes[-2] > closes[-3]:
-        return True
-    if opens[-1] < closes[-1] and closes[-1] > closes[-2]:
+    if closes[-1] > closes[-2]:
         return True
     return False
 
 def check_signal(symbol):
     try:
-        # H4
-        h4_closes, h4_highs, h4_lows, h4_opens = get_klines(symbol, '4h', 200)
-        if len(h4_closes) < 200:
+        # H4 - поглощение
+        h4_closes, h4_highs, h4_lows, h4_opens = get_klines(symbol, '4h', 50)
+        if len(h4_closes) < 10:
             return None
 
-        # EMA 50/200 на H4
-        ema50 = ema(h4_closes, 50)
-        ema200 = ema(h4_closes, 200)
-        if len(ema50) < 2 or len(ema200) < 2:
-            return None
-
-        if ema50[-1] <= ema200[-1]:
-            return None
-
-        # Поглощение на H4
         if not bullish_engulfing(h4_opens, h4_closes):
             return None
 
-        # H1 подтверждение
-        h1_closes, h1_highs, h1_lows, h1_opens = get_klines(symbol, '1h', 50)
-        if len(h1_closes) < 10:
+        # H1 - подтверждение
+        h1_closes, h1_highs, h1_lows, h1_opens = get_klines(symbol, '1h', 20)
+        if len(h1_closes) < 5:
             return None
 
         if not check_h1_long(h1_closes, h1_opens):
@@ -83,8 +62,6 @@ def check_signal(symbol):
         return {
             'symbol': symbol,
             'price': h1_closes[-1],
-            'ema50': round(ema50[-1], 6),
-            'ema200': round(ema200[-1], 6),
         }
     except:
         return None
@@ -112,9 +89,6 @@ def format_message(s):
     msg = f"ЛОНГ СИГНАЛ\n\n"
     msg += f"Монета: {s['symbol']}\n"
     msg += f"Цена: ${s['price']:.6f}\n\n"
-    msg += f"EMA 50: ${s['ema50']:.6f}\n"
-    msg += f"EMA 200: ${s['ema200']:.6f}\n"
-    msg += f"Тренд: ВВЕРХ\n\n"
     msg += f"Поглощение H4: ДА\n"
     msg += f"Подтверждение H1: ДА\n"
     return msg
@@ -132,7 +106,7 @@ def send_auto():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "Бот запущен!\n\nСтратегия:\nEMA 50/200 + Поглощение H4 + Подтверждение H1\n\nКоманды:\n/signal - сканировать рынок")
+    bot.reply_to(message, "Бот запущен!\n\nСтратегия:\nПоглощение H4 + Подтверждение H1\n\nКоманды:\n/signal - сканировать рынок")
 
 @bot.message_handler(commands=['signal'])
 def signal(message):
@@ -149,5 +123,5 @@ t = threading.Thread(target=send_auto)
 t.daemon = True
 t.start()
 
-print("Бот запущен! EMA 50/200 + Bullish Engulfing H4 + H1")
+print("Бот запущен! Bullish Engulfing H4 + H1")
 bot.polling()

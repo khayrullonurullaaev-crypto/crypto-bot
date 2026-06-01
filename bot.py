@@ -14,12 +14,9 @@ def get_h1_klines(symbol, limit=50):
         r = requests.get(url, timeout=10)
         data = r.json()
         closes = [float(x[4]) for x in data]
-        highs = [float(x[2]) for x in data]
-        lows = [float(x[3]) for x in data]
-        opens = [float(x[1]) for x in data]
-        return closes, highs, lows, opens
+        return closes
     except:
-        return [], [], [], []
+        return []
 
 def check_bullish_trend(closes):
     if len(closes) < 3:
@@ -28,24 +25,13 @@ def check_bullish_trend(closes):
         return True
     return False
 
-def check_bos(highs):
-    if len(highs) < 10:
-        return False
-    prev_high = max(highs[-10:-1])
-    if highs[-1] > prev_high:
-        return True
-    return False
-
 def check_signal(symbol):
     try:
-        closes, highs, lows, opens = get_h1_klines(symbol, 50)
-        if len(closes) < 15:
+        closes = get_h1_klines(symbol, 50)
+        if len(closes) < 5:
             return None
         
         if not check_bullish_trend(closes):
-            return None
-        
-        if not check_bos(highs):
             return None
         
         price = closes[-1]
@@ -80,7 +66,7 @@ def scan_market():
         signal = check_signal(symbol)
         if signal:
             results.append(signal)
-        time.sleep(0.1)
+        time.sleep(0.05)
     return results
 
 def format_message(s):
@@ -98,7 +84,7 @@ def send_signals_auto():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "Бот запущен!\n\nСтратегия: Бычий тренд H1 + BOS\n\nКоманды:\n/signal - сигналы сейчас")
+    bot.reply_to(message, "Бот запущен!\n\nСтратегия: Бычий тренд H1\n\nКоманды:\n/signal - сигналы сейчас")
 
 @bot.message_handler(commands=['signal'])
 def signal(message):
@@ -115,5 +101,5 @@ t = threading.Thread(target=send_signals_auto)
 t.daemon = True
 t.start()
 
-print("Бот запущен! Bullish Trend H1 + BOS")
+print("Бот запущен! Bullish Trend H1")
 bot.polling()

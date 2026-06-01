@@ -2,7 +2,7 @@ import time
 import requests
 import telebot
 
-# НАСТРОЙКИ БОТА (Вставь свои данные)
+# НАСТРОЙКИ БОТА @zet_crypto_signal_bot
 TELEGRAM_TOKEN = "8127999792:AAFgC2LR5hEXhxkwf5FnqbCt8Nijz7JVUtQ"
 CHAT_ID = "351317325"
 # Эндпоинт CryptoBubbles для топ-1000 монет в USD

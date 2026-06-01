@@ -2,109 +2,71 @@ import telebot
 import requests
 import time
 import threading
-from datetime import datetime
 
 TOKEN = "8127999792:AAFgC2LR5hEXhxkwf5FnqbCt8Nijz7JVUtQ"
 CHAT_ID = "351317325"
 
 bot = telebot.TeleBot(TOKEN)
 
-def get_h4_klines(symbol, limit=50):
-    try:
-        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=4h&limit={limit}"
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        closes = [float(x[4]) for x in data]
-        opens = [float(x[1]) for x in data]
-        return closes, opens
-    except:
-        return [], []
-
-def get_24h_data(symbol):
-    try:
-        url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        price = float(data['lastPrice'])
-        volume = float(data['quoteAssetVolume'])
-        price_change = float(data['priceChangePercent'])
-        return price, volume, price_change
-    except:
-        return None, None, None
-
-def check_long_signal(symbol):
-    try:
-        # H4 зелёная свеча
-        closes, opens = get_h4_klines(symbol, 20)
-        if len(closes) < 2:
-            return None
-        
-        if closes[-1] <= opens[-1]:
-            return None
-        
-        # 24ч рост
-        price, volume, price_change = get_24h_data(symbol)
-        if price is None or price_change <= 0:
-            return None
-        
-        return {
-            'symbol': symbol,
-            'price': price,
-            'volume': volume,
-        }
-    except:
-        return None
-
-def get_all_symbols():
+def get_all_coins():
     try:
         url = "https://api.binance.com/api/v3/ticker/24hr"
         r = requests.get(url, timeout=15)
         data = r.json()
-        return [x['symbol'] for x in data if x['symbol'].endswith('USDT')]
+        usdt_pairs = [x for x in data if x['symbol'].endswith('USDT')]
+        return usdt_pairs
     except:
         return []
 
-def scan_market():
-    symbols = get_all_symbols()
-    results = []
-    for symbol in symbols:
-        signal = check_long_signal(symbol)
-        if signal:
-            results.append(signal)
-        time.sleep(0.05)
-    return results
+def get_long_signals(coins):
+    signals = []
+    for coin in coins:
+        try:
+            change = float(coin['priceChangePercent'])
+            price = float(coin['lastPrice'])
+            volume = float(coin['quoteAssetVolume'])
+            if change >= 20:
+                signals.append({
+                    'symbol': coin['symbol'],
+                    'price': price,
+                    'volume': volume
+                })
+        except:
+            continue
+    signals.sort(key=lambda x: x['price'], reverse=True)
+    return signals[:50]
 
-def format_message(s):
-    msg = f"{s['symbol']} | ${s['price']:.6f} | ${s['volume']:,.0f}"
-    return msg
-
-def send_auto():
+def send_signals_auto():
     while True:
-        signals = scan_market()
+        coins = get_all_coins()
+        signals = get_long_signals(coins)
         if signals:
             for s in signals:
-                bot.send_message(CHAT_ID, format_message(s))
+                msg = f"{s['symbol']} | ${s['price']:.6f} | ${s['volume']:,.0f}"
+                bot.send_message(CHAT_ID, msg)
                 time.sleep(1)
         time.sleep(900)
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "Бот запущен!\n\nСтратегия: Зелёная H4 + Рост 24ч\n\nКоманды:\n/signal - сканировать рынок")
+    bot.reply_to(message, "Бот запущен!\n\nСтратегия: Рост 20%+ за 24ч\n\nКоманды:\n/signal - сигналы сейчас")
 
 @bot.message_handler(commands=['signal'])
 def signal(message):
     bot.reply_to(message, "Сканирую Binance...")
-    signals = scan_market()
+    coins = get_all_coins()
+    signals = get_long_signals(coins)
     if signals:
         for s in signals:
-            bot.reply_to(message, format_message(s))
-            time.sleep(1)
+            msg = f"{s['symbol']} | ${s['price']:.6f} | ${s['volume']:,.0f}"
+            bot.reply_to(message, msg)
+            time.sleep(0.5)
     else:
-        bot.reply_to(message, "Сейчас нет сигналов.")
+        bot.reply_to(message, "Сейчас нет монет с ростом 20%+. Жди...")
 
-t = threading.Thread(target=send_auto)
+t = threading.Thread(target=send_signals_auto)
 t.daemon = True
 t.start()
 
-print("Бот запущен! H4 + 24ч")
+print("Бот запущен! Рост 20%+")
 bot.polling()

@@ -1,67 +1,73 @@
-import telebot
-import requests
 import time
-import threading
+import requests
+import telebot
 
-TOKEN = "8127999792:AAFgC2LR5hEXhxkwf5FnqbCt8Nijz7JVUtQ"
+# НАСТРОЙКИ БОТА (Вставь свои данные)
+TELEGRAM_TOKEN = "8127999792:AAFgC2LR5hEXhxkwf5FnqbCt8Nijz7JVUtQ"
 CHAT_ID = "351317325"
+# Эндпоинт CryptoBubbles для топ-1000 монет в USD
+API_URL = "https://cryptobubbles.net/backend/data/bubbles1000.usd.json"
 
-bot = telebot.TeleBot(TOKEN)
+# Инициализируем Telegram бота
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-def get_all_coins():
+
+def get_top_growing_coins():
     try:
-        url = "https://api.binance.com/api/v3/ticker/24hr"
-        r = requests.get(url, timeout=15)
-        data = r.json()
-        usdt_pairs = [x for x in data if x['symbol'].endswith('USDT')]
-        return usdt_pairs
-    except:
-        return []
+        # Запрашиваем данные с сайта
+        response = requests.get(API_URL, timeout=10)
 
-def get_top_longs(coins):
-    signals = []
-    for coin in coins:
-        try:
-            change = float(coin['priceChangePercent'])
-            if change > 5:
-                signals.append({
-                    'symbol': coin['symbol'],
-                    'price': float(coin['lastPrice']),
-                    'change': change,
-                    'volume': float(coin['quoteAssetVolume'])
-                })
-        except:
-            continue
-    signals.sort(key=lambda x: x['change'], reverse=True)
-    return signals[:10]
+        if response.status_code == 200:
+            data = response.json()
 
-def send_signals_auto():
-    while True:
-        coins = get_all_coins()
-        signals = get_top_longs(coins)
-        if signals:
-            msg = "ТОП 10 ЛОНГ\n\n"
-            for i, s in enumerate(signals, 1):
-                msg += f"{i}. {s['symbol']} | ${s['price']:.6f} | +{s['change']:.2f}% | ${s['volume']:,.0f}\n"
-            bot.send_message(CHAT_ID, msg)
-        time.sleep(900)
+            # Сортируем монеты по росту за последний час ('hour')
+            sorted_coins = sorted(
+                data,
+                key=lambda x: x.get("performance", {}).get("hour", 0),
+                reverse=True,
+            )
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.reply_to(message, "Бот запущен!")
+            # Выбираем ТОП-10
+            top_10 = sorted_coins[:10]
 
-@bot.message_handler(commands=['signal'])
-def signal(message):
-    coins = get_all_coins()
-    signals = get_top_longs(coins)
-    if signals:
-        msg = "ТОП 10 ЛОНГ\n\n"
-        for i, s in enumerate(signals, 1):
-            msg += f"{i}. {s['symbol']} | ${s['price']:.6f} | +{s['change']:.2f}% | ${s['volume']:,.0f}\n"
-        bot.reply_to(message, msg)
+            # Формируем красивое текстовое сообщение
+            current_time = time.strftime("%H:%M:%S")
+            message_text = f"🚀 <b>ТОП-10 ИМПУЛЬСНЫХ МОНЕТ ({current_time})</b>\n"
+            message_text += "<i>Фильтрация: рост за 1 час</i>\n\n"
 
-t = threading.Thread(target=send_signals_auto)
-t.daemon = True
-t.start()
+            for index, coin in enumerate(top_10, 1):
+                symbol = coin.get("symbol", "").upper()
+                name = coin.get("name", "Unknown")
+                change_hour = coin.get("performance", {}).get("hour", 0)
+                price = coin.get("price", 0)
 
-bot.polling()
+                # Добавляем строчку монеты в общее сообщение
+                message_text += (
+                    f"{index}. <b>{symbol}</b> ({name})\n"
+                    f"   📈 Рост: +{change_hour:.2f}%\n"
+                    f"   💰 Цена: ${price:,.4f}\n\n"
+                )
+
+            # Отправляем сообщение тебе в Telegram (включаем HTML-теги для жирного шрифта)
+            bot.send_message(
+                chat_id=MY_CHAT_ID, text=message_text, parse_mode="HTML"
+            )
+            print(f"[{current_time}] Сигнал успешно отправлен в Telegram.")
+
+        else:
+            print(f"Ошибка получения данных. Статус: {response.status_code}")
+
+    except Exception as e:
+        print(f"Ошибка в работе парсера: {e}")
+
+
+# Приветственное сообщение в консоли при запуске
+print("Бот-сканер успешно запущен на сервере и начал работу...")
+
+# Сразу делаем первую проверку при запуске, чтобы не ждать 5 минут
+get_top_growing_coins()
+
+# Бесконечный цикл с интервалом в 5 минут (300 секунд)
+while True:
+    time.sleep(300)
+    get_top_growing_coins()

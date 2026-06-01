@@ -20,19 +20,38 @@ def get_h4_klines(symbol, limit=50):
     except:
         return [], []
 
+def get_24h_data(symbol):
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        price = float(data['lastPrice'])
+        volume = float(data['quoteAssetVolume'])
+        price_change = float(data['priceChangePercent'])
+        return price, volume, price_change
+    except:
+        return None, None, None
+
 def check_long_signal(symbol):
     try:
+        # H4 зелёная свеча
         closes, opens = get_h4_klines(symbol, 20)
         if len(closes) < 2:
             return None
         
-        # Если последняя H4 свеча зелёная (close > open) - ЛОНГ
-        if closes[-1] > opens[-1]:
-            return {
-                'symbol': symbol,
-                'price': closes[-1],
-            }
-        return None
+        if closes[-1] <= opens[-1]:
+            return None
+        
+        # 24ч рост
+        price, volume, price_change = get_24h_data(symbol)
+        if price is None or price_change <= 0:
+            return None
+        
+        return {
+            'symbol': symbol,
+            'price': price,
+            'volume': volume,
+        }
     except:
         return None
 
@@ -56,25 +75,21 @@ def scan_market():
     return results
 
 def format_message(s):
-    msg = f"ЛОНГ СИГНАЛ\n\n"
-    msg += f"Монета: {s['symbol']}\n"
-    msg += f"Цена: ${s['price']:.6f}\n"
+    msg = f"{s['symbol']} | ${s['price']:.6f} | ${s['volume']:,.0f}"
     return msg
 
 def send_auto():
     while True:
-        now = datetime.now()
-        if now.hour >= 4 or now.hour < 2:
-            signals = scan_market()
-            if signals:
-                for s in signals:
-                    bot.send_message(CHAT_ID, format_message(s))
-                    time.sleep(1)
+        signals = scan_market()
+        if signals:
+            for s in signals:
+                bot.send_message(CHAT_ID, format_message(s))
+                time.sleep(1)
         time.sleep(900)
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "Бот запущен!\n\nСтратегия: ЛОНГ на H4\n\nКоманды:\n/signal - сканировать рынок")
+    bot.reply_to(message, "Бот запущен!\n\nСтратегия: Зелёная H4 + Рост 24ч\n\nКоманды:\n/signal - сканировать рынок")
 
 @bot.message_handler(commands=['signal'])
 def signal(message):
@@ -85,11 +100,11 @@ def signal(message):
             bot.reply_to(message, format_message(s))
             time.sleep(1)
     else:
-        bot.reply_to(message, "Сейчас нет сигналов ЛОНГ на H4.")
+        bot.reply_to(message, "Сейчас нет сигналов.")
 
 t = threading.Thread(target=send_auto)
 t.daemon = True
 t.start()
 
-print("Бот запущен! ЛОНГ на H4")
+print("Бот запущен! H4 + 24ч")
 bot.polling()

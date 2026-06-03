@@ -1,11 +1,20 @@
 import time
 import requests
 import telebot
+import os
+from dotenv import load_dotenv
 
-# Твои данные
-TELEGRAM_TOKEN = "8127999792:AAFgC2LR5hEXhxkwf5FnqbCt8Nijz7JVUtQ"
-MY_CHAT_ID = 351317325
+# Загружаем переменные окружения
+load_dotenv()
+
+# Твои данные из .env файла
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
 API_URL = "https://cryptobubbles.net/backend/data/bubbles1000.usd.json"
+
+# Проверка, что все переменные установлены
+if not TELEGRAM_TOKEN or not MY_CHAT_ID:
+    raise ValueError("TELEGRAM_TOKEN и MY_CHAT_ID должны быть установлены в .env файле")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
@@ -50,8 +59,8 @@ def get_top_growing_coins():
     except Exception as e:
         print(f"Ошибка: {e}")
 
-print("SMC Impulser запущен (фильтр роста > 10%, без фильтра объема, 15 мин)...")
-
-while True:
-    get_top_growing_coins()
-    time.sleep(900) # 15 минут
+if __name__ == "__main__":
+    print("SMC Impulser запущен (фильтр роста > 10%, без фильтра объема, 15 мин)...")
+    while True:
+        get_top_growing_coins()
+        time.sleep(900)  # 15 минут

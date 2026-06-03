@@ -2,15 +2,8 @@ import time
 import requests
 import telebot
 import os
-import hmac
-import hashlib
-from dotenv import load_dotenv
-from urllib.parse import urlencode
 
-# Загружаем переменные окружения
-load_dotenv()
-
-# Твои данные
+# Твои данные (Railway автоматически их устанавливает)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
@@ -23,13 +16,12 @@ KLINES_ENDPOINT = "/api/v3/klines"
 
 # Проверка переменных
 if not all([TELEGRAM_TOKEN, MY_CHAT_ID, BINANCE_API_KEY, BINANCE_API_SECRET]):
-    raise ValueError("Все переменные должны быть установлены!")
+    raise ValueError("Все переменные должны быть установлены на Railway!")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 def get_binance_data():
     try:
-        # Получаем данные о всех торговых парах
         response = requests.get(f"{BINANCE_BASE_URL}{TICKER_ENDPOINT}", timeout=10)
         if response.status_code == 200:
             return response.json()
@@ -77,11 +69,9 @@ def get_top_growing_coins():
         for ticker in tickers:
             symbol = ticker.get("symbol", "")
             
-            # Ищем только USDT пары
             if not symbol.endswith("USDT"):
                 continue
             
-            # Получаем 1-часовой прирост
             hour_change, price = get_hourly_kline(symbol)
             
             if hour_change is not None and hour_change >= 10.0:
@@ -91,7 +81,6 @@ def get_top_growing_coins():
                     "price": price
                 })
         
-        # Сортируем по росту
         sorted_coins = sorted(
             filtered_coins,
             key=lambda x: x["change"],
@@ -104,7 +93,6 @@ def get_top_growing_coins():
             message_text = f"🚀 <b>IMPULSE DETECTED</b> ({current_time})\n"
             message_text += "<i>Монеты с ростом > 10% за час (Binance Real-Time):</i>\n\n"
             
-            # Берем Топ-10
             for index, coin in enumerate(sorted_coins[:10], 1):
                 symbol = coin["symbol"]
                 change = coin["change"]
@@ -120,7 +108,7 @@ def get_top_growing_coins():
         print(f"Ошибка: {e}")
 
 if __name__ == "__main__":
-    print("Binance Real-Time Bot запущен (requests API, 15 мин интервал)...")
+    print("Binance Real-Time Bot запущен (15 мин интервал)...")
     while True:
         get_top_growing_coins()
-        time.sleep(900)  # 15 минут
+        time.sleep(900)

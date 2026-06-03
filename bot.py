@@ -2,32 +2,76 @@ import time
 import requests
 import telebot
 import os
+import hmac
+import hashlib
 from dotenv import load_dotenv
-from binance.client import Client
+from urllib.parse import urlencode
 
 # Загружаем переменные окружения
 load_dotenv()
 
-# Твои данные из переменных
+# Твои данные
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 
-# Проверка, что все переменные установлены
-if not all([TELEGRAM_TOKEN, MY_CHAT_ID, BINANCE_API_KEY, BINANCE_API_SECRET]):
-    raise ValueError("Все переменные (TELEGRAM_TOKEN, MY_CHAT_ID, BINANCE_API_KEY, BINANCE_API_SECRET) должны быть установлены!")
+# Binance API endpoints
+BINANCE_BASE_URL = "https://api.binance.com"
+TICKER_ENDPOINT = "/api/v3/ticker/24hr"
+KLINES_ENDPOINT = "/api/v3/klines"
 
-# Инициализируем бота и клиент Binance
+# Проверка переменных
+if not all([TELEGRAM_TOKEN, MY_CHAT_ID, BINANCE_API_KEY, BINANCE_API_SECRET]):
+    raise ValueError("Все переменные должны быть установлены!")
+
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-client = Client(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET)
+
+def get_binance_data():
+    try:
+        # Получаем данные о всех торговых парах
+        response = requests.get(f"{BINANCE_BASE_URL}{TICKER_ENDPOINT}", timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"Ошибка API: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Ошибка при получении данных: {e}")
+        return None
+
+def get_hourly_kline(symbol):
+    try:
+        params = {
+            "symbol": symbol,
+            "interval": "1h",
+            "limit": 2
+        }
+        response = requests.get(
+            f"{BINANCE_BASE_URL}{KLINES_ENDPOINT}",
+            params=params,
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if len(data) >= 2:
+                prev_close = float(data[0][4])
+                curr_close = float(data[1][4])
+                
+                if prev_close > 0:
+                    hour_change = ((curr_close - prev_close) / prev_close) * 100
+                    return hour_change, curr_close
+        return None, None
+    except Exception as e:
+        return None, None
 
 def get_top_growing_coins():
     try:
-        # Получаем 24-часовую статистику для всех пар USDT
-        tickers = client.get_ticker()
+        tickers = get_binance_data()
         
-        # Фильтруем только USDT пары и ищем монеты с ростом >= 10% за час
+        if not tickers:
+            return
+        
         filtered_coins = []
         
         for ticker in tickers:
@@ -37,29 +81,22 @@ def get_top_growing_coins():
             if not symbol.endswith("USDT"):
                 continue
             
-            try:
-                # Получаем 1-часовой свечи для расчета часового роста
-                klines = client.get_klines(symbol=symbol, interval=Client.KLINE_INTERVAL_1HOUR, limit=2)
-                
-                if len(klines) >= 2:
-                    prev_close = float(klines[0][4])  # Close цена предыдущей свечи
-                    curr_close = float(klines[1][4])  # Close цена текущей свечи
-                    
-                    if prev_close > 0:
-                        hour_change = ((curr_close - prev_close) / prev_close) * 100
-                        
-                        if hour_change >= 10.0:
-                            curr_price = float(klines[1][4])
-                            filtered_coins.append({
-                                "symbol": symbol.replace("USDT", ""),
-                                "change": hour_change,
-                                "price": curr_price
-                            })
-            except Exception as e:
-                continue
+            # Получаем 1-часовой прирост
+            hour_change, price = get_hourly_kline(symbol)
+            
+            if hour_change is not None and hour_change >= 10.0:
+                filtered_coins.append({
+                    "symbol": symbol.replace("USDT", ""),
+                    "change": hour_change,
+                    "price": price
+                })
         
-        # Сортируем по росту (от большего к меньшему)
-        sorted_coins = sorted(filtered_coins, key=lambda x: x["change"], reverse=True)
+        # Сортируем по росту
+        sorted_coins = sorted(
+            filtered_coins,
+            key=lambda x: x["change"],
+            reverse=True
+        )
         
         current_time = time.strftime("%H:%M:%S")
         
@@ -77,13 +114,13 @@ def get_top_growing_coins():
             bot.send_message(chat_id=MY_CHAT_ID, text=message_text, parse_mode="HTML")
             print(f"[{current_time}] Отправлено: {len(sorted_coins[:10])} монет")
         else:
-            print(f"[{current_time}] Нет монет с ростом > 10%. Ждем...")
+            print(f"[{current_time}] Нет монет с ростом > 10%")
             
     except Exception as e:
         print(f"Ошибка: {e}")
 
 if __name__ == "__main__":
-    print("Binance Real-Time Impulser запущен (фильтр роста > 10%, реальное время, 15 мин)...")
+    print("Binance Real-Time Bot запущен (requests API, 15 мин интервал)...")
     while True:
         get_top_growing_coins()
         time.sleep(900)  # 15 минут

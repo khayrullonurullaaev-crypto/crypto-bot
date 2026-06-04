@@ -4,21 +4,17 @@ import telebot
 import os
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-MY_CHAT_ID = int(os.getenv("MY_CHAT_ID"))
+MY_CHAT_ID = os.getenv("MY_CHAT_ID")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-def send_signals():
+def get_growing_coins():
     try:
         url = "https://api.binance.com/api/v3/ticker/24hr"
         response = requests.get(url, timeout=10)
-        
-        if response.status_code != 200:
-            return
-        
         data = response.json()
-        coins = []
         
+        coins = []
         for item in data:
             symbol = item.get("symbol", "")
             if not symbol.endswith("USDT"):
@@ -30,28 +26,29 @@ def send_signals():
                     price = float(item.get("lastPrice", 0))
                     coins.append({
                         "sym": symbol.replace("USDT", ""),
-                        "chg": change,
+                        "change": change,
                         "price": price
                     })
             except:
-                continue
+                pass
         
-        coins = sorted(coins, key=lambda x: x["chg"], reverse=True)
+        coins = sorted(coins, key=lambda x: x["change"], reverse=True)
         
         if coins:
-            msg = f"🚀 IMPULSE ({time.strftime('%H:%M:%S')})\n\n"
+            msg = f"🚀 IMPULSE ({time.strftime('%H:%M:%S')})\n"
+            msg += f"Топ-10 монет с ростом > 10% за час:\n\n"
             
             for i, c in enumerate(coins[:10], 1):
-                msg += f"{i}. {c['sym']} | +{c['chg']:.2f}% | ${c['price']:.8f}\n"
+                msg += f"{i}. {c['sym']} | 📈 +{c['change']:.2f}% | 💰 ${c['price']:.8f}\n"
             
             bot.send_message(MY_CHAT_ID, msg)
-            print(f"Sent {len(coins[:10])} coins")
+            print(f"✅ Отправлено {len(coins[:10])} монет")
     
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Ошибка: {e}")
 
 if __name__ == "__main__":
-    print("Bot started...")
+    print("🤖 Бот запущен! Проверка каждые 15 минут...")
     while True:
-        send_signals()
+        get_growing_coins()
         time.sleep(900)

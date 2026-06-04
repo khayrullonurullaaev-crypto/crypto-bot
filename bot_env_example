@@ -1,5 +1,0 @@
-# Telegram Bot Token (получите от @BotFather)
-TELEGRAM_TOKEN=ВАШ_ТОКЕН_СЮДА
-
-# Ваш Chat ID (где будут приходить сообщения)
-MY_CHAT_ID=ВАШ_CHAT_ID_СЮДА
